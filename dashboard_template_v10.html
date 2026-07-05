@@ -548,9 +548,10 @@
   /* ============ MODO DIRETORIA (versão resumida) ============ */
   /* Esconde exportações */
   body.diretoria .btn-export { display:none !important; }
-  /* Esconde Decomposição Preço×Volume×Mix e Diagnóstico por Canal (granular) */
+  /* Esconde Decomposição Preço×Volume×Mix, Canal e Plano de Recuperação (granular) */
   body.diretoria #decompCard,
-  body.diretoria #ufCard { display:none !important; }
+  body.diretoria #ufCard,
+  body.diretoria #planoRecuperacaoCard { display:none !important; }
   /* Esconde links de menu para seções ocultas */
   body.diretoria .nav-export { display:none !important; }
   /* Plano de Ação gerencial: mostra só o resumo executivo */
@@ -750,7 +751,7 @@ window.addEventListener('DOMContentLoaded', function(){
     <button type="button" class="nav-link nav-export" onclick="scrollToSection('ufCard')">Canal</button>
     <button type="button" class="nav-link nav-export" onclick="scrollToSection('decompCard')">Decomp.</button>
     <button type="button" class="nav-link" onclick="scrollToSection('planoAcaoCard')">Ações</button>
-    <button type="button" class="nav-link" onclick="scrollToSection('planoRecuperacaoCard')">Recuperação</button>
+    <button type="button" class="nav-link nav-export" onclick="scrollToSection('planoRecuperacaoCard')">Recuperação</button>
     <button type="button" class="nav-link" onclick="scrollToSection('chartYoYCard')">Evolução</button>
     <button type="button" class="nav-link" onclick="scrollToSection('chartDifferenceCard')">Evolução SIxSO</button>
     <button type="button" class="nav-link" onclick="scrollToSection('targetsCard')">Targets</button>
@@ -4038,8 +4039,23 @@ function diagnosticoGrupoRec(franquiasGrupo, per){
       if(sC.has(k)) siProd[pn].c += v;
     }
     // Cruzar: produtos com SI e SO, calcular gap
+    // Match flexível (igual ao resto do dashboard): exato → inclusão → 1ª palavra
+    const _soKeys = Object.keys(soProd);
+    function _acharSO(siNorm){
+      if(soProd[siNorm]) return soProd[siNorm];
+      for(const sk of _soKeys){
+        if(sk.indexOf(siNorm) >= 0 || siNorm.indexOf(sk) >= 0) return soProd[sk];
+      }
+      const primeira = siNorm.split(/[\s(,]/)[0];
+      if(primeira && primeira.length >= 4){
+        for(const sk of _soKeys){
+          if(sk.split(/[\s(,]/)[0] === primeira) return soProd[sk];
+        }
+      }
+      return null;
+    }
     for(const pn in siProd){
-      const si = siProd[pn], so = soProd[pn];
+      const si = siProd[pn], so = _acharSO(pn);
       if(!so) continue;
       if((si.a + si.c) < 1 && (so.a + so.c) < 1) continue;
       const siVar = si.c > 0 ? ((si.a - si.c)/si.c*100) : (si.a>0?100:0);
@@ -6612,7 +6628,9 @@ function renderInsights(data, per){
   // ============================================================
   let htmlFinal = '<div style="font-size:13px;font-weight:700;color:#1E3A5F;margin:0 0 10px 0;padding:8px 12px;background:#EFF6FF;border-radius:6px;border-left:4px solid #1E3A5F">MACRO · Visão Brasil</div>';
   htmlFinal += '<ul style="margin:0 0 18px 0;padding-left:22px">';
-  htmlFinal += ins.map(i => `<li style="margin-bottom:6px">${i}</li>`).join('');
+  // Na versão diretoria, mostra só os principais destaques (menos informação)
+  const _insMostrar = (typeof MODO_DIRETORIA !== 'undefined' && MODO_DIRETORIA) ? ins.slice(0, 4) : ins;
+  htmlFinal += _insMostrar.map(i => `<li style="margin-bottom:6px">${i}</li>`).join('');
   htmlFinal += '</ul>';
 
   // Análise por franquia (usando dados do card Franquia)
@@ -9481,7 +9499,7 @@ async function exportPPTX(){
       slide.addText([
         {text:'Business Use Only', options:{bold:true, color:'5B6B7E'}},
         {text:'·   Source: IQVIA (Sell-out) · SAP IRIS (Sell-in)', options:{color:'94A3B8'}},
-        {text:'   · v10.13 sixso-recup', options:{color:'C7D2DE'}}
+        {text:'   · v10.15 gapfuzzy', options:{color:'C7D2DE'}}
       ], {
         x:4.6, y:7.12, w:8.43, h:0.3,
         fontSize:9, fontFace:'Arial', align:'right'

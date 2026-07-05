@@ -56,6 +56,11 @@ SENHA_DIRETOR = ""
 PBKDF2_ITER = 100000            # iteracoes da derivacao de chave (mais = mais seguro, abre mais devagar)
 PATH_CRYPTOJS = r"cryptojs_bundle.js"
 
+# Mês de referência mostrado no topo ("Dados atualizados até ___").
+# Deixe "" para o script PERGUNTAR ao rodar; ou fixe aqui (ex.: "junho").
+# Também aceita --mes na linha de comando.
+MES_REFERENCIA = ""
+
 # =========================================================
 # Proteção por senha da versão diretoria (AES-256-CBC + PBKDF2)
 # =========================================================
@@ -878,9 +883,26 @@ def gerar_html():
     pf = re.compile(r"function\s+gerarDadosExemplo\s*\(\s*\)\s*\{.*?^\}", re.DOTALL | re.MULTILINE)
     template = pf.sub("// gerarDadosExemplo() removida", template, count=1)
 
-    sm = f"{len(df):,} SI + {len(sellout):,} SO - {ts}"
+    # Mês de referência: config, ou --mes, ou pergunta ao rodar
+    import argparse as _apm
+    _apm0 = _apm.ArgumentParser(add_help=False)
+    _apm0.add_argument("--mes", default=None)
+    _ames, _ = _apm0.parse_known_args()
+    mes_ref = (MES_REFERENCIA or "").strip()
+    if _ames.mes is not None:
+        mes_ref = _ames.mes.strip()
+    if not mes_ref:
+        try:
+            mes_ref = input("Dados atualizados ate qual mes? (ex.: junho): ").strip()
+        except Exception:
+            mes_ref = ""
+    sm = f"Dados atualizados até {mes_ref}" if mes_ref else "Dados atualizados"
     template = template.replace('<span id="statusText">Carregando...</span>',
                                 f'<span id="statusText">{sm}</span>')
+    # Impede que a linha de "registros (demo)" sobrescreva o status no navegador
+    template = template.replace(
+        "document.getElementById('statusText').textContent = `${rawData.length.toLocaleString('pt-BR')} registros (demo)`;",
+        f"document.getElementById('statusText').textContent = {json.dumps(sm, ensure_ascii=False)};")
 
     # EMBUTIR LIBS
     if EMBUTIR_LIBS:

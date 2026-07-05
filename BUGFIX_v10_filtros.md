@@ -1,21 +1,18 @@
-# v10.13 - Plano de Recuperação: fora a decomposição, entra SI×SO por produto
+# v10.15 - "Produtos Maior Gap SI×SO" agora cruza (match fuzzy)
 
-## O que mudou (nos 2 HTMLs e no PowerPoint)
-No Plano de Recuperação (diagnóstico), a Decomposição V×P×Mix foi REMOVIDA.
-No lugar entrou a análise de canal SI×SO:
-- SI × SO · Saúde do Canal (Sell-in%, Sell-out%, Gap do grupo) — ao lado.
-- Produtos · Maior Gap SI × SO: tabela dos produtos com maior descompasso, com
-  SI%, SO%, Gap (pp) e classificação:
-    ⚠ Estoque crescendo (SI acima do SO)
-    ▲ Ruptura / demanda (SO acima do SI)
-    ✓ Alinhado
-  O sell-out casa com o sell-in pelo nome normalizado (ignora sufixos tipo "(NVR)").
+## Problema
+No Plano de Recuperação, a seção "Produtos · Maior Gap SI × SO" mostrava
+"Sem produtos com sell-in e sell-out cruzáveis" mesmo havendo produtos.
+Causa: cruzava SI×SO por nome EXATO normalizado; nos dados reais os nomes do
+sell-out (IQVIA) e sell-in (IRIS) diferem (sufixos, apresentação), então não batia.
 
-## Onde
-- HTML completo e HTML diretoria (é a mesma base) → card "Plano de Recuperação".
-- PowerPoint → slides "Plano de Recuperação · Diagnóstico" (lado esquerdo agora é a
-  tabela de produtos com maior gap; direito segue a saúde do canal).
+## Correção
+Passou a usar o mesmo match flexível do resto do dashboard:
+1) nome exato → 2) um nome contém o outro → 3) mesma 1ª palavra (4+ letras).
+Assim DURYSTA cruza com "DURYSTA IMPLANTE 10MCG", SYSTANE ULTRA com
+"SYSTANE ULTRA 15ML", etc. Vale no HTML e no PowerPoint (mesma função).
 
 ## Observação
-A Decomposição V×P×Mix continua existindo como CARD próprio na versão completa
-(oculto na diretoria). Só saiu de dentro do Plano de Recuperação, como pedido.
+É match aproximado (a mesma lógica que o dashboard já usa quando o
+DePara_Produtos.xlsx não cobre 100%). Para cruzamento exato, mantenha o
+DePara_Produtos.xlsx atualizado.
