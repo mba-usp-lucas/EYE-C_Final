@@ -6628,8 +6628,21 @@ function renderInsights(data, per){
   // ============================================================
   let htmlFinal = '<div style="font-size:13px;font-weight:700;color:#1E3A5F;margin:0 0 10px 0;padding:8px 12px;background:#EFF6FF;border-radius:6px;border-left:4px solid #1E3A5F">MACRO · Visão Brasil</div>';
   htmlFinal += '<ul style="margin:0 0 18px 0;padding-left:22px">';
-  // Na versão diretoria, mostra só os principais destaques (menos informação)
-  const _insMostrar = (typeof MODO_DIRETORIA !== 'undefined' && MODO_DIRETORIA) ? ins.slice(0, 4) : ins;
+  // Na versão diretoria: só Performance + Maior produto + Alerta + Oportunidade (SEM decomposição)
+  let _insMostrar;
+  if (typeof MODO_DIRETORIA !== 'undefined' && MODO_DIRETORIA) {
+    const _acha = (kw) => ins.find(t => t.indexOf(kw) !== -1);
+    _insMostrar = [
+      _acha('Performance:'),
+      _acha('Produto líder') || _acha('Principal produto') || _acha('Maior crescimento no grupo'),
+      _acha('Alerta crítico') || _acha('Maior gap de target') || _acha('Franquia mais impactada'),
+      _acha('Oportunidade') || _acha('Maior superação de target') || _acha('Franquia em destaque')
+    ].filter(Boolean);
+    // fallback: se nada casar, mostra os principais sem a decomposição
+    if (_insMostrar.length === 0) _insMostrar = ins.filter(t => t.indexOf('Decomposição') === -1).slice(0, 4);
+  } else {
+    _insMostrar = ins;
+  }
   htmlFinal += _insMostrar.map(i => `<li style="margin-bottom:6px">${i}</li>`).join('');
   htmlFinal += '</ul>';
 
@@ -9499,7 +9512,7 @@ async function exportPPTX(){
       slide.addText([
         {text:'Business Use Only', options:{bold:true, color:'5B6B7E'}},
         {text:'·   Source: IQVIA (Sell-out) · SAP IRIS (Sell-in)', options:{color:'94A3B8'}},
-        {text:'   · v10.15 gapfuzzy', options:{color:'C7D2DE'}}
+        {text:'   · v10.16 insdir', options:{color:'C7D2DE'}}
       ], {
         x:4.6, y:7.12, w:8.43, h:0.3,
         fontSize:9, fontFace:'Arial', align:'right'
