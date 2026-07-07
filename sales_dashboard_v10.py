@@ -30,6 +30,11 @@ PATH_OUTPUT = r"dashboard_sales_insightsv10.html"
 PATH_TEMPLATE = r"dashboard_template_v10.html"
 PATH_NAO_MAPEADOS = r"produtos_nao_mapeados.csv"
 
+# Excel de reconciliacao do sell-in (total por franquia + produtos sem DePara).
+# Deixe GERAR_RECONCILIACAO = True para gerar junto com o dashboard.
+GERAR_RECONCILIACAO = True
+PATH_RECONCILIACAO = r"sellin_reconciliacao.xlsx"
+
 EMBUTIR_LIBS = True
 
 # =========================================================
@@ -740,6 +745,68 @@ def ler_sellin(path):
     return df
 
 
+def _nrm_prod(s):
+    import re as _re
+    if pd.isna(s): return ""
+    return _re.sub(r"\s+", " ", _re.sub(r"\([^)]*\)", "", str(s))).strip().upper()
+
+
+def exportar_reconciliacao_sellin(df, mapa_depara, path_out):
+    """Gera um Excel de reconciliacao do sell-in:
+       - Por Franquia: total carregado (confira o CL aqui)
+       - CL - Produtos: detalhe dos produtos de CL
+       - Sem DePara (incluir): produtos de sell-in sem par no DePara (o 'faltante' + onde incluir)
+       - Linhas sem ANO/MES: linhas que nao somam por periodo
+    O sell-in continua 100% no total do dashboard; este Excel e so diagnostico."""
+    try:
+        C = COLS
+        d = df.copy()
+        for c in [C["VALOR_UNID"], C["VALOR_BRL"], C["VALOR_USD"]]:
+            d[c] = pd.to_numeric(d[c], errors="coerce").fillna(0)
+
+        porFr = d.groupby(C["FRANQUIA"]).agg(
+            Linhas=(C["PRODUTO"], "size"),
+            Total_Unid=(C["VALOR_UNID"], "sum"),
+            Total_BRL=(C["VALOR_BRL"], "sum"),
+            Total_USD=(C["VALOR_USD"], "sum"),
+        ).reset_index().rename(columns={C["FRANQUIA"]: "FRANQUIA"}).sort_values("Total_BRL", ascending=False)
+        tot = {"FRANQUIA": "TOTAL GERAL", "Linhas": int(porFr["Linhas"].sum()),
+               "Total_Unid": porFr["Total_Unid"].sum(), "Total_BRL": porFr["Total_BRL"].sum(),
+               "Total_USD": porFr["Total_USD"].sum()}
+        porFr = pd.concat([porFr, pd.DataFrame([tot])], ignore_index=True)
+
+        mask_cl = d[C["FRANQUIA"]].astype(str).str.upper().str.strip().isin(["CL", "LENTES"])
+        cl = d[mask_cl].groupby(C["PRODUTO"]).agg(
+            Total_Unid=(C["VALOR_UNID"], "sum"), Total_BRL=(C["VALOR_BRL"], "sum"), Total_USD=(C["VALOR_USD"], "sum"),
+        ).reset_index().rename(columns={C["PRODUTO"]: "PRODUTO"}).sort_values("Total_BRL", ascending=False)
+        if cl.empty:
+            cl = pd.DataFrame([{"PRODUTO": "(nenhuma linha com FRANQUIA = CL/LENTES)", "Total_Unid": 0, "Total_BRL": 0, "Total_USD": 0}])
+
+        cobertos = set(_nrm_prod(v) for v in (mapa_depara or {}).values())
+        prod = d.groupby([C["FRANQUIA"], C["PRODUTO"]]).agg(
+            Total_Unid=(C["VALOR_UNID"], "sum"), Total_BRL=(C["VALOR_BRL"], "sum"),
+        ).reset_index().rename(columns={C["FRANQUIA"]: "FRANQUIA", C["PRODUTO"]: "PRODUTO"})
+        prod["_n"] = prod["PRODUTO"].apply(_nrm_prod)
+        sem = prod[~prod["_n"].isin(cobertos)].drop(columns=["_n"]).sort_values(["FRANQUIA", "Total_BRL"], ascending=[True, False])
+        if sem.empty:
+            sem = pd.DataFrame([{"FRANQUIA": "(todos os produtos ja tem par no DePara)", "PRODUTO": "", "Total_Unid": 0, "Total_BRL": 0}])
+        else:
+            sem["ONDE_INCLUIR"] = "DePara_Produtos.xlsx: PRODUTO_SELLIN = este nome; PRODUTO_SELLOUT = nome equivalente no IQVIA"
+
+        prob = d[d[C["ANO"]].isna() | d[C["MES_NUM"]].isna()]
+        prob = prob[[C["FRANQUIA"], C["PRODUTO"], C["ANO"], C["MES_NUM"], C["VALOR_BRL"]]] if len(prob) else pd.DataFrame([{"info": "(nenhuma linha sem ANO/MES)"}])
+
+        with pd.ExcelWriter(path_out, engine="openpyxl") as w:
+            porFr.to_excel(w, sheet_name="Por Franquia", index=False)
+            cl.to_excel(w, sheet_name="CL - Produtos", index=False)
+            sem.to_excel(w, sheet_name="Sem DePara (incluir)", index=False)
+            prob.to_excel(w, sheet_name="Linhas sem ANO-MES", index=False)
+        print(f"[OK] Reconciliacao sell-in: {path_out}")
+        print(f"     Produtos sem DePara: {0 if 'ja tem par' in str(sem.iloc[0,0]) else len(sem)}")
+    except Exception as e:
+        print(f"[AVISO] Nao consegui gerar a reconciliacao ({e}).")
+
+
 def ler_targets(path):
     if not Path(path).exists(): return {}
     df = pd.read_excel(path)
@@ -771,6 +838,11 @@ def gerar_html():
     df = ler_sellin(PATH_XLSX)
     targets = ler_targets(PATH_TARGETS)
     targets_fin = ler_targets_fin(PATH_TARGETS_FIN)
+
+    # Reconciliacao do sell-in (diagnostico: total por franquia + produtos sem DePara)
+    if GERAR_RECONCILIACAO:
+        _mapa_dep, _ig = ler_depara(PATH_DEPARA)
+        exportar_reconciliacao_sellin(df, _mapa_dep, PATH_RECONCILIACAO)
 
     # v5.9: franq norm map {NORMALIZADO -> case_original_do_sellin}
     franq_norm_map = {}
